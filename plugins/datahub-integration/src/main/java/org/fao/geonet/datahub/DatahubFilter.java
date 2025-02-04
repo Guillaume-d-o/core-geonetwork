@@ -1,4 +1,4 @@
-package org.fao.geonet.web;
+package org.fao.geonet.datahub;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
@@ -126,19 +126,6 @@ public class DatahubFilter implements Filter {
                 configuration = portal.getDatahubConfiguration();
             }
         }
-
-        /*TomlParseResult toml = Toml.parse(configuration);
-        Map<String, Object> tomlMap = toml.toMap();
-
-        // Force the "gn4_api_url" field to a value including the portal name
-        if (!tomlMap.containsKey("global")) {
-            tomlMap.put("global", Map.of());
-        }
-        Map<String, String> globalSection = (Map<String, String>) tomlMap.get("global");
-        globalSection.put("geonetwork4_api_url", "/geonetwork/" + portalName + "/api");
-
-        TomlWriter tomlWriter = new TomlWriter();
-        configuration = tomlWriter.write(tomlMap);*/
 
         // remove url & add new one
         configuration = configuration.replaceAll("\ngeonetwork4_api_url\\s?=.+", "\n")
