@@ -23,18 +23,16 @@
 
 package org.fao.geonet.datahub;
 
-import org.hibernate.annotations.Type;
 
-import javax.annotation.Nonnull;
+import org.fao.geonet.domain.GeonetEntity;
+
 import javax.persistence.*;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+
 
 @Entity
 @Access(AccessType.PROPERTY)
 @Table(name = "DatahubConfigurations")
-public class DatahubConfiguration extends Localized {
+public class DatahubConfiguration extends GeonetEntity {
 
     private String portalName;
     private String configurationFile;

@@ -24,15 +24,14 @@
 package org.fao.geonet.datahub;
 
 import org.fao.geonet.datahub.DatahubConfiguration;
-import org.springframework.data.domain.Sort;
+import org.fao.geonet.repository.GeonetRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.List;
-import java.util.Set;
 
-public interface ConfigurationRepository extends GeonetRepository<DatahubConfiguration, String>, JpaSpecificationExecutor<Source> {
+
+public interface DatahubConfigurationRepository extends GeonetRepository<DatahubConfiguration, String>, JpaSpecificationExecutor<DatahubConfiguration> {
 
     @Nullable
     DatahubConfiguration findOneByPortalName(@Nonnull String portalName);
