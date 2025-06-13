@@ -28,7 +28,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.CharStreams;
 import jeeves.server.context.ServiceContext;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.client.methods.HttpGet;
 import org.fao.geonet.ApplicationContextHolder;
@@ -46,6 +45,7 @@ import org.fao.geonet.utils.Xml;
 import org.jdom.Attribute;
 import org.jdom.Element;
 import org.jdom.JDOMException;
+import org.jdom.Namespace;
 import org.jdom.Text;
 import org.json.JSONObject;
 import org.json.XML;
@@ -57,6 +57,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -125,7 +126,13 @@ class Harvester implements IHarvester<HarvestResult> {
 
             if (isRDFLike(content)) type = SimpleUrlResourceType.RDFXML;
             else if (isXMLLike(content)) type = SimpleUrlResourceType.XML;
-            else type = SimpleUrlResourceType.JSON;
+            else {
+                if (isSTACLike(content)) {
+                    type = SimpleUrlResourceType.STAC;
+                } else {
+                    type = SimpleUrlResourceType.JSON;
+                }
+            }
 
             if (type == SimpleUrlResourceType.XML
                 || type == SimpleUrlResourceType.RDFXML) {
@@ -138,7 +145,9 @@ class Harvester implements IHarvester<HarvestResult> {
             if (StringUtils.isNotEmpty(params.numberOfRecordPath)) {
                 try {
                     if (type == SimpleUrlResourceType.XML) {
-                        Object element = Xml.selectSingle(xmlObj, params.numberOfRecordPath, xmlObj.getAdditionalNamespaces());
+                        @SuppressWarnings("unchecked")
+                        List<Namespace> namespaces = (List<Namespace>) xmlObj.getAdditionalNamespaces();
+                        Object element = Xml.selectSingle(xmlObj, params.numberOfRecordPath, namespaces);
                         if (element != null) {
                             String s = getXmlElementTextValue(element);
                             numberOfRecordsToHarvest = Integer.parseInt(s);
@@ -165,13 +174,16 @@ class Harvester implements IHarvester<HarvestResult> {
                         }
                     }
                     if (StringUtils.isNotEmpty(params.loopElement)
-                        || type == SimpleUrlResourceType.RDFXML) {
+                        || type == SimpleUrlResourceType.RDFXML
+                        || type == SimpleUrlResourceType.STAC) {
                         Map<String, Element> uuids = new HashMap<>();
                         try {
                             if (type == SimpleUrlResourceType.XML) {
                                 collectRecordsFromXml(xmlObj, uuids, aligner);
                             } else if (type == SimpleUrlResourceType.RDFXML) {
                                 collectRecordsFromRdf(xmlObj, uuids, aligner);
+                            } else if (type == SimpleUrlResourceType.STAC) {
+                                collectRecordsFromStac(jsonObj, uuids, aligner);
                             } else if (type == SimpleUrlResourceType.JSON) {
                                 collectRecordsFromJson(jsonObj, uuids, aligner);
                             }
@@ -267,7 +279,9 @@ class Harvester implements IHarvester<HarvestResult> {
                                        Aligner aligner) {
         List<Element> xmlNodes = null;
         try {
-            xmlNodes = Xml.selectNodes(xmlObj, params.loopElement, xmlObj.getAdditionalNamespaces());
+            @SuppressWarnings("unchecked")
+            List<Element> nodes = (List<Element>) Xml.selectNodes(xmlObj, params.loopElement, xmlObj.getAdditionalNamespaces());
+            xmlNodes = nodes;
         } catch (JDOMException e) {
             log.error(String.format("Failed to query records using %s. Error is: %s",
                 params.loopElement, e.getMessage()));
@@ -280,7 +294,10 @@ class Harvester implements IHarvester<HarvestResult> {
                 String uuid =
                     null;
                 try {
-                    uuid = getXmlElementTextValue(Xml.selectSingle(element, params.recordIdPath, element.getAdditionalNamespaces()));
+                    @SuppressWarnings("unchecked")
+                    List<Namespace> namespaces = (List<Namespace>) element.getAdditionalNamespaces();
+                    Object value = Xml.selectSingle(element, params.recordIdPath, namespaces);
+                    uuid = getXmlElementTextValue(value);
                     uuids.put(uuid, applyConversion(element, null));
                 } catch (JDOMException e) {
                     log.error(String.format("Failed to extract UUID for record. Error is %s.",
@@ -292,6 +309,314 @@ class Harvester implements IHarvester<HarvestResult> {
         }
     }
 
+    /**
+     * Process STAC resources and extract metadata records.
+     * This method can handle both STAC collections with multiple items
+     * and individual STAC items.
+     * 
+     * @param jsonObj The JSON object containing STAC content
+     * @param uuids Map to store the harvested records with their UUIDs
+     * @param aligner The aligner instance
+     */
+    private void collectRecordsFromStac(JsonNode jsonObj,
+                                       Map<String, Element> uuids,
+                                       Aligner aligner) {
+        // Determine if this is a collection or a single item
+        boolean isCollection = false;
+        JsonNode items = null;
+        
+        // Check if this is a collection with features
+        if (jsonObj.has("features") && jsonObj.get("features").isArray() && jsonObj.get("features").size() > 0) {
+            isCollection = true;
+            items = jsonObj.get("features");
+        } else if (jsonObj.at("/features").isArray() && jsonObj.at("/features").size() > 0) {
+            isCollection = true;
+            items = jsonObj.at("/features");
+        }
+        
+        if (isCollection) {
+            // Process collection of STAC items
+            String itemsPath = StringUtils.isNotEmpty(params.loopElement) ? 
+                              params.loopElement : "/features";
+            
+            // Use direct property or JsonPath depending on how it was configured
+            items = itemsPath.startsWith("/") ? jsonObj.at(itemsPath) : jsonObj.get(itemsPath);
+            
+            log.debug(String.format("%d records found in STAC collection.", items.size()));
+            
+            // Process each item in the collection
+            items.forEach(stacItem -> {
+                processStacItem(stacItem, uuids);
+            });
+        } else {
+            // This is a single STAC item
+            log.debug("Processing single STAC item");
+            processStacItem(jsonObj, uuids);
+        }
+    }
+    
+    /**
+     * Process an individual STAC item and add it to the UUID map.
+     * 
+     * @param stacItem The STAC item to process
+     * @param uuids Map to store the harvested records with their UUIDs
+     */
+    private void processStacItem(JsonNode stacItem, Map<String, Element> uuids) {
+        String uuid = null;
+        try {
+            // Use STAC item ID as UUID if available
+            if (StringUtils.isNotEmpty(params.recordIdPath)) {
+                // Handle both direct property and JsonPath
+                if (params.recordIdPath.startsWith("/")) {
+                    uuid = stacItem.at(params.recordIdPath).asText();
+                } else {
+                    uuid = stacItem.has(params.recordIdPath) ? 
+                          stacItem.get(params.recordIdPath).asText() : null;
+                }
+                
+                if (StringUtils.isNotEmpty(uuid)) {
+                    uuid = extractUuidFromIdentifier(uuid);
+                }
+            } else if (stacItem.has("id")) {
+                uuid = stacItem.get("id").asText();
+            }
+
+            // If no UUID found, hash the entire item
+            if (StringUtils.isEmpty(uuid)) {
+                uuid = Sha1Encoder.encodeString(stacItem.toString());
+            }
+        } catch (Exception e) {
+            log.error(String.format("Failed to extract ID from STAC item. Error is: %s", e.getMessage()));
+        }
+
+        try {
+            String apiUrlPath = params.url.split("\\?")[0];
+            URL apiUrl = new URL(apiUrlPath);
+            String nodeUrl = new StringBuilder(apiUrl.getProtocol()).append("://").append(apiUrl.getAuthority()).toString();
+            Element xml = convertStacItemToXml(stacItem, uuid, apiUrlPath, nodeUrl);
+            uuids.put(uuid, xml);
+        } catch (Exception e) {
+            errors.add(new HarvestError(this.context, e));
+            log.warning(String.format("Failed to process STAC item. Error is: %s", e.getMessage()));
+        }
+    }
+
+    /**
+     * Converts a STAC item to XML for processing.
+     */
+    private Element convertStacItemToXml(JsonNode stacItem, String uuid, String apiUrl, String nodeUrl) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            String itemAsXml = XML.toString(
+                new JSONObject(
+                    objectMapper.writeValueAsString(stacItem)), "stacItem");
+            itemAsXml = Xml.stripNonValidXMLCharacters(itemAsXml)
+                .replace("<@", "<")
+                .replace("</@", "</")
+                .replaceAll("(:)(?![^<>]*<)", "_"); // this removes colon from property names
+            Element itemAsElement = Xml.loadString(itemAsXml, false);
+            itemAsElement.addContent(new Element("uuid").setText(uuid));
+            itemAsElement.addContent(new Element("apiUrl").setText(apiUrl));
+            itemAsElement.addContent(new Element("nodeUrl").setText(nodeUrl));
+
+            // Add STAC metadata if available in the response
+            if (stacItem.has(STAC_VERSION)) {
+                itemAsElement.addContent(new Element("stacVersion").setText(stacItem.get(STAC_VERSION).asText()));
+            }
+
+            return applyConversion(itemAsElement, uuid);
+        } catch (Exception e) {
+            log.error(String.format("Failed to convert STAC item %s to XML. Error is: %s",
+                uuid, e.getMessage()));
+        }
+        return null;
+    }
+
+    private Element convertJsonRecordToXml(JsonNode jsonRecord, String uuid, String apiUrl, String nodeUrl) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            String recordAsXml = XML.toString(
+                new JSONObject(
+                    objectMapper.writeValueAsString(jsonRecord)), "record");
+            recordAsXml = Xml.stripNonValidXMLCharacters(recordAsXml)
+                .replace("<@", "<")
+                .replace("</@", "</")
+                .replaceAll("(:)(?![^<>]*<)", "_"); // this removes colon from property names
+            Element recordAsElement = Xml.loadString(recordAsXml, false);
+            recordAsElement.addContent(new Element("uuid").setText(uuid));
+            recordAsElement.addContent(new Element("apiUrl").setText(apiUrl));
+            recordAsElement.addContent(new Element("nodeUrl").setText(nodeUrl));
+            return applyConversion(recordAsElement, null);
+        } catch (Exception e) {
+            log.error(String.format("Failed to convert JSON record %s to XML. Error is: %s",
+                uuid, e.getMessage()));
+        }
+        return null;
+    }
+
+    private Element applyConversion(Element input, String uuid) {
+        if (StringUtils.isNotEmpty(params.toISOConversion)) {
+            try {
+                // First try to get the conversion from the standard location
+                Path xslPath = ApplicationContextHolder.get().getBean(GeonetworkDataDirectory.class)
+                    .getXsltConversion(params.toISOConversion);
+                
+                // If not found, try to find it in the STAC-specific location
+                if (xslPath == null || !Files.exists(xslPath)) {
+                    Path webappDir = ApplicationContextHolder.get().getBean(GeonetworkDataDirectory.class).getWebappDir();
+                    xslPath = webappDir.resolve("xslt/services/stac/" + params.toISOConversion + ".xsl");
+                    log.info("Looking for STAC conversion at " + xslPath);
+                }
+                
+                HashMap<String, Object> xslParams = new HashMap<>();
+                if (uuid != null) {
+                    xslParams.put("uuid", uuid);
+                }
+                return Xml.transform(input, xslPath, xslParams);
+            } catch (Exception e) {
+                errors.add(new HarvestError(this.context, e));
+                log.error(String.format("Failed to apply conversion %s to record %s. Error is: %s",
+                    params.toISOConversion, uuid, e.getMessage()));
+                return null;
+            }
+        } else {
+            return input;
+        }
+    }
+
+    /**
+     * Read the response of the URL.
+     */
+    private String retrieveUrl(String url) throws Exception {
+        if (!Lib.net.isUrlValid(url))
+            throw new BadParameterEx("Invalid URL", url);
+        HttpGet httpMethod = null;
+        ClientHttpResponse httpResponse = null;
+
+        try {
+            httpMethod = new HttpGet(createUrl(url));
+            httpResponse = requestFactory.execute(httpMethod);
+            int status = httpResponse.getRawStatusCode();
+            Log.debug(LOGGER_NAME, "Request status code: " + status);
+            return CharStreams.toString(new InputStreamReader(httpResponse.getBody()));
+        } finally {
+            if (httpMethod != null) {
+                httpMethod.releaseConnection();
+            }
+            if (httpResponse != null) {
+                try {
+                    httpResponse.close();
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+        }
+    }
+
+    private static final String STAC_VERSION = "stac_version";
+    private static final String LINKS = "links";
+    private static final String REL = "rel";
+    private static final String FEATURES = "/features";
+    private static final String TYPE = "type";
+    private static final String PROPERTIES = "properties";
+    private static final String ASSETS = "assets";
+    private static final String FEATURE = "Feature";
+    private static final String FEATURECOLLECTION = "FeatureCollection";
+
+    /**
+     * Determines if a JSON content is STAC-like by checking for key STAC characteristics.
+     * This method checks for STAC version field, STAC-specific links,
+     * STAC features and other STAC-specific properties.
+     * 
+     * @param content The JSON content to check
+     * @return true if the content appears to be STAC, false otherwise
+     */
+    private boolean isSTACLike(String content) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode jsonObj = objectMapper.readTree(content);
+
+            // 1. Check for stac_version field which is required in STAC spec
+            if (jsonObj.has(STAC_VERSION)) {
+                return true;
+            }
+
+            // 2. Check for common STAC links
+            if (hasStacLinks(jsonObj)) {
+                return true;
+            }
+
+            // 3. Check for features array with STAC properties
+            if (hasStacFeatures(jsonObj)) {
+                return true;
+            }
+            
+            // 4. Check if it's a STAC Item (has type "Feature" and properties/assets)
+            if (jsonObj.has(TYPE) && 
+                (FEATURE.equals(jsonObj.get(TYPE).asText()) || 
+                 FEATURECOLLECTION.equals(jsonObj.get(TYPE).asText())) &&
+                (jsonObj.has(PROPERTIES) || jsonObj.has(ASSETS))) {
+                return true;
+            }
+        } catch (Exception e) {
+            // If we can't parse as JSON, it's not a STAC response
+            return false;
+        }
+        return false;
+    }
+
+    /**
+     * Checks if a JSON object has STAC-specific links
+     * 
+     * @param jsonObj The JSON object to check
+     * @return true if STAC-specific links are found, false otherwise
+     */
+    private boolean hasStacLinks(JsonNode jsonObj) {
+        if (jsonObj.has(LINKS) && jsonObj.get(LINKS).isArray()) {
+            for (JsonNode link : jsonObj.get(LINKS)) {
+                if (link.has(REL)) {
+                    String rel = link.get(REL).asText();
+                    if (rel.equals("self") || rel.equals("items") ||
+                        rel.equals("collections") || rel.equals("root") ||
+                        rel.equals("parent") || rel.equals("child") ||
+                        rel.equals("collection")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks if a JSON object has STAC features
+     * 
+     * @param jsonObj The JSON object to check
+     * @return true if STAC features are found, false otherwise
+     */
+    private boolean hasStacFeatures(JsonNode jsonObj) {
+        // Handle both "/features" path notation and direct "features" property
+        JsonNode features = jsonObj.has("features") ? 
+            jsonObj.get("features") : jsonObj.at(FEATURES);
+            
+        if (features != null && features.isArray() && features.size() > 0) {
+            JsonNode firstFeature = features.get(0);
+            if (firstFeature.has(TYPE) &&
+                firstFeature.get(TYPE).asText().equals(FEATURE) &&
+                (firstFeature.has(PROPERTIES) || firstFeature.has(ASSETS))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private URI createUrl(String jsonUrl) throws URISyntaxException {
+        return new URI(jsonUrl);
+    }
+    
+    /**
+     * Extracts text value from various element types
+     */
     private String getXmlElementTextValue(Object element) {
         String s = null;
         if (element instanceof Text) {
@@ -300,10 +625,15 @@ class Harvester implements IHarvester<HarvestResult> {
             s = ((Attribute) element).getValue();
         } else if (element instanceof String) {
             s = (String) element;
+        } else if (element instanceof Element) {
+            s = ((Element) element).getText();
         }
         return s;
     }
 
+    /**
+     * Extracts UUID from an identifier, handling URL formats
+     */
     private String extractUuidFromIdentifier(final String identifier) {
         String uuid = identifier;
         if (Lib.net.isUrlValid(uuid)) {
@@ -312,6 +642,9 @@ class Harvester implements IHarvester<HarvestResult> {
         return uuid;
     }
 
+    /**
+     * Builds a list of URLs for paging through results
+     */
     @VisibleForTesting
     protected List<String> buildListOfUrl(SimpleUrlParams params, int numberOfRecordsToHarvest) {
         List<String> urlList = new ArrayList<>();
@@ -359,75 +692,5 @@ class Harvester implements IHarvester<HarvestResult> {
         }
 
         return urlList;
-    }
-
-    private Element convertJsonRecordToXml(JsonNode jsonRecord, String uuid, String apiUrl, String nodeUrl) {
-        ObjectMapper objectMapper = new ObjectMapper();
-        try {
-            String recordAsXml = XML.toString(
-                new JSONObject(
-                    objectMapper.writeValueAsString(jsonRecord)), "record");
-            recordAsXml = Xml.stripNonValidXMLCharacters(recordAsXml)
-                .replace("<@", "<")
-                .replace("</@", "</")
-                .replaceAll("(:)(?![^<>]*<)", "_"); // this removes colon from property names
-            Element recordAsElement = Xml.loadString(recordAsXml, false);
-            recordAsElement.addContent(new Element("uuid").setText(uuid));
-            recordAsElement.addContent(new Element("apiUrl").setText(apiUrl));
-            recordAsElement.addContent(new Element("nodeUrl").setText(nodeUrl));
-            return applyConversion(recordAsElement, null);
-        } catch (Exception e) {
-            log.error(String.format("Failed to convert JSON record %s to XML. Error is: %s",
-                uuid, e.getMessage()));
-        }
-        return null;
-    }
-
-    private Element applyConversion(Element input, String uuid) {
-        if (StringUtils.isNotEmpty(params.toISOConversion)) {
-            Path xslPath = ApplicationContextHolder.get().getBean(GeonetworkDataDirectory.class)
-                .getXsltConversion(params.toISOConversion);
-            try {
-                HashMap<String, Object> xslParams = new HashMap<>();
-                if (uuid != null) {
-                    xslParams.put("uuid", uuid);
-                }
-                return Xml.transform(input, xslPath, xslParams);
-            } catch (Exception e) {
-                errors.add(new HarvestError(this.context, e));
-                log.error(String.format("Failed to apply conversion %s to record %s. Error is: %s",
-                    params.toISOConversion, uuid, e.getMessage()));
-                return null;
-            }
-        } else {
-            return input;
-        }
-    }
-
-    /**
-     * Read the response of the URL.
-     */
-    private String retrieveUrl(String url) throws Exception {
-        if (!Lib.net.isUrlValid(url))
-            throw new BadParameterEx("Invalid URL", url);
-        HttpGet httpMethod = null;
-        ClientHttpResponse httpResponse = null;
-
-        try {
-            httpMethod = new HttpGet(createUrl(url));
-            httpResponse = requestFactory.execute(httpMethod);
-            int status = httpResponse.getRawStatusCode();
-            Log.debug(LOGGER_NAME, "Request status code: " + status);
-            return CharStreams.toString(new InputStreamReader(httpResponse.getBody()));
-        } finally {
-            if (httpMethod != null) {
-                httpMethod.releaseConnection();
-            }
-            IOUtils.closeQuietly(httpResponse);
-        }
-    }
-
-    private URI createUrl(String jsonUrl) throws URISyntaxException {
-        return new URI(jsonUrl);
     }
 }

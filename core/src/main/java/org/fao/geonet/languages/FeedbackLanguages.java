@@ -28,10 +28,10 @@ import org.fao.geonet.constants.Geonet;
 import org.fao.geonet.kernel.setting.SettingManager;
 import org.fao.geonet.kernel.setting.Settings;
 import org.fao.geonet.utils.Log;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.annotation.PostConstruct;
 import java.util.*;
+import java.util.MissingResourceException;
 
 /**
  * Represents a utility class for managing supported locales and translation follows text for feedback.
@@ -40,8 +40,11 @@ public class FeedbackLanguages {
     private Locale[] supportedLocales;
     private String translationFollowsText;
 
-    @Autowired
-    SettingManager settingManager;
+    private final SettingManager settingManager;
+
+    public FeedbackLanguages(SettingManager settingManager) {
+        this.settingManager = settingManager;
+    }
 
     /**
      * Initializes the supported locales and translation follows text after bean creation.
@@ -104,7 +107,7 @@ public class FeedbackLanguages {
      * @return True if the locale is valid, false otherwise.
      */
     private boolean isValidLocale(Locale locale) {
-        Boolean isValid;
+        boolean isValid;
         try {
             isValid = locale.getLanguage().equals(Geonet.DEFAULT_LANGUAGE)
                 || ResourceBundle.getBundle("org.fao.geonet.api.Messages", locale).getLocale().getLanguage().equals(locale.getLanguage());
@@ -118,7 +121,7 @@ public class FeedbackLanguages {
             } catch (MissingResourceException e) {
                 localeLanguage = locale.getLanguage();
             }
-            Log.warning(Log.GEONETWORK_MODULE + ".feedbacklanguages", "Locale '" + localeLanguage + "'  is invalid or missing message bundles. Ensure feedback locales are correct.");
+            Log.warning(Geonet.GEONETWORK, "Locale '" + localeLanguage + "'  is invalid or missing message bundles. Ensure feedback locales are correct.");
         }
         return isValid;
     }

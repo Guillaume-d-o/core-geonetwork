@@ -1,0 +1,1 @@
+/home/gdeoliveira/projects/geonetwork/core-geonetwork/web/src/main/webapp/xslt/services/stac/stac-to-iso19115-3.xsl

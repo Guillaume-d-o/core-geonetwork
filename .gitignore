@@ -88,3 +88,5 @@ web/src/main/webapp/data/
 web/src/main/webapp/doc/en
 web/src/main/webapp/doc/fr
 web/src/main/webapp/WEB-INF/data/data/resources/schemapublication
+plugins/datahub-integration/src/main/resources/*
+plugins/datahub-integration/node

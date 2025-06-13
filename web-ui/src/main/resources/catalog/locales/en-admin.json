@@ -165,6 +165,8 @@
     "simpleurl": "Simple URL",
     "csw-FailedToParseCapabilities": "Error while parsing GetCapabilities",
     "csw-capabilitiesUrlHelp": "CSW URL with or without GetCapabilities parameters",
+    "stac-harvester-help": "Harvester for SpatioTemporal Asset Catalog (STAC) resources. STAC is a modern format for geospatial data catalogs.",
+    "stac-harvester-description": "STAC is a specification for cataloging geospatial data. The SimpleUrlHarvester can be configured to harvest both STAC Collections and STAC Items.",
     "csw-category": "Category for harvested records",
     "csw-harvesterAddFilter": "Add Filter",
     "csw-harvesterBboxFilter": "BBOX filter",

@@ -1,0 +1,134 @@
+{
+  "type": "FeatureCollection",
+  "stac_version": "1.0.0",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "id": "S2A_MSIL2A_20230605T105031_N0509_R051_T31TDJ_20230605T134522",
+      "properties": {
+        "datetime": "2023-06-05T10:50:31.024Z",
+        "created": "2023-06-05T13:45:22.022Z",
+        "updated": "2023-06-05T13:45:22.022Z",
+        "platform": "sentinel-2a",
+        "instruments": ["msi"],
+        "constellation": "sentinel-2",
+        "mission": "sentinel-2",
+        "gsd": 10
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [3.4012, 43.8019],
+            [4.5123, 43.8019],
+            [4.5123, 44.5678],
+            [3.4012, 44.5678],
+            [3.4012, 43.8019]
+          ]
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/collections/sentinel2-l2a-theia/items/S2A_MSIL2A_20230605T105031_N0509_R051_T31TDJ_20230605T134522",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "collection",
+          "href": "https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/collections/sentinel2-l2a-theia",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "B02": {
+          "href": "https://theia.cnes.fr/atdistrib/resto/collections/SENTINEL2/S2A_MSIL2A_20230605T105031_N0509_R051_T31TDJ_20230605T134522/SENTINEL2B_20230605-105031-051_L2A_T31TDJ_B2_10m.jp2",
+          "type": "image/jp2",
+          "title": "Blue Band"
+        },
+        "overview": {
+          "href": "https://theia.cnes.fr/atdistrib/resto/collections/SENTINEL2/S2A_MSIL2A_20230605T105031_N0509_R051_T31TDJ_20230605T134522/thumbnail.jpg",
+          "type": "image/jpeg",
+          "title": "Thumbnail",
+          "roles": ["thumbnail"]
+        }
+      },
+      "collection": "sentinel2-l2a-theia"
+    },
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "id": "S2B_MSIL2A_20230601T105029_N0509_R051_T31TDJ_20230601T134343",
+      "properties": {
+        "datetime": "2023-06-01T10:50:29.024Z",
+        "created": "2023-06-01T13:43:43.022Z",
+        "updated": "2023-06-01T13:43:43.022Z",
+        "platform": "sentinel-2b",
+        "instruments": ["msi"],
+        "constellation": "sentinel-2",
+        "mission": "sentinel-2",
+        "gsd": 10
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [3.4012, 43.8019],
+            [4.5123, 43.8019],
+            [4.5123, 44.5678],
+            [3.4012, 44.5678],
+            [3.4012, 43.8019]
+          ]
+        ]
+      },
+      "links": [
+        {
+          "rel": "self",
+          "href": "https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/collections/sentinel2-l2a-theia/items/S2B_MSIL2A_20230601T105029_N0509_R051_T31TDJ_20230601T134343",
+          "type": "application/geo+json"
+        },
+        {
+          "rel": "collection",
+          "href": "https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/collections/sentinel2-l2a-theia",
+          "type": "application/json"
+        }
+      ],
+      "assets": {
+        "B02": {
+          "href": "https://theia.cnes.fr/atdistrib/resto/collections/SENTINEL2/S2B_MSIL2A_20230601T105029_N0509_R051_T31TDJ_20230601T134343/SENTINEL2B_20230601-105029-051_L2A_T31TDJ_B2_10m.jp2",
+          "type": "image/jp2",
+          "title": "Blue Band"
+        },
+        "overview": {
+          "href": "https://theia.cnes.fr/atdistrib/resto/collections/SENTINEL2/S2B_MSIL2A_20230601T105029_N0509_R051_T31TDJ_20230601T134343/thumbnail.jpg",
+          "type": "image/jpeg",
+          "title": "Thumbnail",
+          "roles": ["thumbnail"]
+        }
+      },
+      "collection": "sentinel2-l2a-theia"
+    }
+  ],
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/collections/sentinel2-l2a-theia/items?limit=2",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "next",
+      "href": "https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/collections/sentinel2-l2a-theia/items?limit=2&token=next:sentinel2-l2a-theia:S2B_MSIL2A_20230601T105029_N0509_R051_T31TDJ_20230601T134343",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/collections/sentinel2-l2a-theia",
+      "type": "application/json"
+    },
+    {
+      "rel": "root",
+      "href": "https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/",
+      "type": "application/json"
+    }
+  ]
+}

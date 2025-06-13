@@ -1,0 +1,6 @@
+2025-06-13T17:16:22,947 INFO  [geonetwork.harvester] - Starting harvesting of test montpellier 2
+2025-06-13T17:16:22,957 INFO  [geonetwork.harvester] - Started harvesting from node : test montpellier 2 (SimpleUrlHarvester)
+2025-06-13T17:16:23,181 WARN  [geonetwork.harvester] - Page size param 'limit' not found or is not a numeric in URL 'https://stacapi-cdos.apps.okd.crocc.meso.umontpellier.fr/collections'. Can't build a list of pages.
+2025-06-13T17:16:23,193 ERROR [geonetwork.harvester] - Failed to apply conversion stac-to-iso19115-3 to record 95e4a30d09902228de28356b7d595716972d9492. Error is: /home/gdeoliveira/projects/geonetwork/core-geonetwork/web/src/main/webapp/xsl/conversion/import/stac-to-iso19115-3.xsl
+2025-06-13T17:16:23,209 INFO  [geonetwork.harvester] - Total records processed in all searches :1
+2025-06-13T17:16:23,209 INFO  [geonetwork.harvester] - Ended harvesting from node : test montpellier 2 (SimpleUrlHarvester)
