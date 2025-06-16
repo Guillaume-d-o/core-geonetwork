@@ -321,7 +321,37 @@ class Harvester implements IHarvester<HarvestResult> {
     private void collectRecordsFromStac(JsonNode jsonObj,
                                        Map<String, Element> uuids,
                                        Aligner aligner) {
-        // Determine if this is a collection or a single item
+        // Check if this is a STAC Collections object (containing multiple collections)
+        if (jsonObj.has(COLLECTIONS) && jsonObj.get(COLLECTIONS).isArray()) {
+            log.debug(String.format("%d collections found in STAC response.", jsonObj.get(COLLECTIONS).size()));
+            
+            // Process each collection in the STAC Collections response
+            jsonObj.get(COLLECTIONS).forEach(stacCollection -> {
+                String uuid = null;
+                try {
+                    // Use collection ID as UUID
+                    if (stacCollection.has("id")) {
+                        uuid = stacCollection.get("id").asText();
+                        uuid = extractUuidFromIdentifier(uuid);
+                    } else {
+                        // If no UUID found, hash the entire collection
+                        uuid = Sha1Encoder.encodeString(stacCollection.toString());
+                    }
+                    
+                    String apiUrlPath = params.url.split("\\?")[0];
+                    URL apiUrl = new URL(apiUrlPath);
+                    String nodeUrl = new StringBuilder(apiUrl.getProtocol()).append("://").append(apiUrl.getAuthority()).toString();
+                    Element xml = convertStacCollectionToXml(stacCollection, uuid, apiUrlPath, nodeUrl);
+                    uuids.put(uuid, xml);
+                } catch (Exception e) {
+                    errors.add(new HarvestError(this.context, e));
+                    log.warning(String.format("Failed to process STAC collection. Error is: %s", e.getMessage()));
+                }
+            });
+            return;
+        }
+        
+        // Determine if this is a collection of items or a single item
         boolean isCollection = false;
         JsonNode items = null;
         
@@ -353,6 +383,37 @@ class Harvester implements IHarvester<HarvestResult> {
             log.debug("Processing single STAC item");
             processStacItem(jsonObj, uuids);
         }
+    }
+    
+    /**
+     * Converts a STAC collection to XML for processing.
+     */
+    private Element convertStacCollectionToXml(JsonNode stacCollection, String uuid, String apiUrl, String nodeUrl) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            String collectionAsXml = XML.toString(
+                new JSONObject(
+                    objectMapper.writeValueAsString(stacCollection)), "stacCollection");
+            collectionAsXml = Xml.stripNonValidXMLCharacters(collectionAsXml)
+                .replace("<@", "<")
+                .replace("</@", "</")
+                .replaceAll("(:)(?![^<>]*<)", "_"); // this removes colon from property names
+            Element collectionAsElement = Xml.loadString(collectionAsXml, false);
+            collectionAsElement.addContent(new Element("uuid").setText(uuid));
+            collectionAsElement.addContent(new Element("apiUrl").setText(apiUrl));
+            collectionAsElement.addContent(new Element("nodeUrl").setText(nodeUrl));
+
+            // Add STAC metadata if available in the response
+            if (stacCollection.has(STAC_VERSION)) {
+                collectionAsElement.addContent(new Element("stacVersion").setText(stacCollection.get(STAC_VERSION).asText()));
+            }
+
+            return applyConversion(collectionAsElement, uuid);
+        } catch (Exception e) {
+            log.error(String.format("Failed to convert STAC collection %s to XML. Error is: %s",
+                uuid, e.getMessage()));
+        }
+        return null;
     }
     
     /**
@@ -517,6 +578,7 @@ class Harvester implements IHarvester<HarvestResult> {
     private static final String LINKS = "links";
     private static final String REL = "rel";
     private static final String FEATURES = "/features";
+    private static final String COLLECTIONS = "collections";
     private static final String TYPE = "type";
     private static final String PROPERTIES = "properties";
     private static final String ASSETS = "assets";
@@ -546,12 +608,22 @@ class Harvester implements IHarvester<HarvestResult> {
                 return true;
             }
 
-            // 3. Check for features array with STAC properties
+            // 3. Check for STAC collections array
+            if (jsonObj.has(COLLECTIONS) && jsonObj.get(COLLECTIONS).isArray()) {
+                // Check if at least one collection has a STAC property
+                for (JsonNode collection : jsonObj.get(COLLECTIONS)) {
+                    if (collection.has(STAC_VERSION) || collection.has("id") || collection.has("description")) {
+                        return true;
+                    }
+                }
+            }
+
+            // 4. Check for features array with STAC properties
             if (hasStacFeatures(jsonObj)) {
                 return true;
             }
             
-            // 4. Check if it's a STAC Item (has type "Feature" and properties/assets)
+            // 5. Check if it's a STAC Item (has type "Feature" and properties/assets)
             if (jsonObj.has(TYPE) && 
                 (FEATURE.equals(jsonObj.get(TYPE).asText()) || 
                  FEATURECOLLECTION.equals(jsonObj.get(TYPE).asText())) &&
